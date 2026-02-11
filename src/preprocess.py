@@ -24,7 +24,7 @@ def epochs_from_recording(raw,
                           input_event_id: dict,
                           out_event_id: dict,
                           epoch_duration: float = 30.
-    ) -> mne.epochs.Epochs:
+    ):
 
         events, _ = mne.events_from_annotations(
             raw, event_id=input_event_id, chunk_duration=epoch_duration)
@@ -34,7 +34,7 @@ def epochs_from_recording(raw,
         epochs = mne.Epochs(raw=raw, events=events,
                                 event_id=out_event_id, tmin=0., tmax=tmax, baseline=None)
         
-        return epochs
+        return epochs, events
 
 def inds(start, duration, sfreq):
     s = int(sfreq*start)
