@@ -3,6 +3,8 @@ import numpy as np
 
 from mne.datasets.sleep_physionet.age import fetch_data
 
+from src import consts
+
 def load_raw_recording(subjects: list,
                           recording: list,
                           mapping: dict):
@@ -154,3 +156,35 @@ def bandpower_v(data, sfreq, window=True, relative=True, include_total=False):
     if include_total:
         ret_bandpower['total'] = total_power if not relative else 1.0
     return ret_bandpower
+
+def five_num_summary(data):
+    # print(data)
+    perc_25 = np.percentile(data, 25)
+    perc_50 = np.percentile(data, 50)
+    perc_75 = np.percentile(data, 75)
+
+    iqr = perc_75 - perc_25
+    perc_0 = np.min(data[data >= (perc_25 - 1.5*iqr)])
+    perc_100 = np.max(data[data <= (perc_75 + 1.5*iqr)])
+
+    num_outliers_lower = data[(data < (perc_25 - 1.5*iqr))].shape[0]
+    num_outliers_upper = data[(data > (perc_75 + 1.5*iqr))].shape[0]
+
+    return {
+        "0%": perc_0,
+        "25%": perc_25,
+        "50%": perc_50,
+        "75%": perc_75,
+        "100%": perc_100,
+        "# of Outliers (lower)": num_outliers_lower,
+        "# of Outliers (upper)": num_outliers_upper,
+    }
+
+def bandpower_five_num_summary(data):
+    ret_five_num_summary = {}
+    for event in consts.get_event_id().keys():
+        event_five_num_summary = {}
+        for band in data[event].keys():
+            event_five_num_summary[band] = five_num_summary(data[event][band])
+        ret_five_num_summary[event] = event_five_num_summary
+    return ret_five_num_summary
