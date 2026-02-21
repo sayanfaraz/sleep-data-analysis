@@ -157,6 +157,20 @@ def bandpower_v(data, sfreq, window=True, relative=True, include_total=False):
         ret_bandpower['total'] = total_power if not relative else 1.0
     return ret_bandpower
 
+def bandpowers_from_epochs(epochs, raw, event_ids, sfreq, channel):
+    sleep_stage_rel_bandpower = {}
+    sleep_stage_abs_bandpower = {}
+
+    for event, e_id in event_ids.items():
+        print(event, "( id", e_id, ")")
+
+        sub_epochs = epochs[event].get_data()
+        # print("Epoch shape: ", (sub_epochs[:, raw.ch_names.index('EEG Fpz-Cz'), :].T).shape, "\n")
+        sleep_stage_rel_bandpower[event] = bandpower_v(sub_epochs[:, raw.ch_names.index(channel), :].T, sfreq, relative=True, include_total=False)
+        sleep_stage_abs_bandpower[event] = bandpower_v(sub_epochs[:, raw.ch_names.index(channel), :].T, sfreq, relative=False, include_total=True)
+
+    return sleep_stage_rel_bandpower, sleep_stage_abs_bandpower
+
 def five_num_summary(data):
     # print(data)
     perc_25 = np.percentile(data, 25)
