@@ -1,5 +1,6 @@
 import mne
 import numpy as np
+import pandas as pd
 
 from mne.datasets.sleep_physionet.age import fetch_data
 
@@ -170,6 +171,25 @@ def bandpowers_from_epochs(epochs, raw, event_ids, sfreq, channel):
         sleep_stage_abs_bandpower[event] = bandpower_v(sub_epochs[:, raw.ch_names.index(channel), :].T, sfreq, relative=False, include_total=True)
 
     return sleep_stage_rel_bandpower, sleep_stage_abs_bandpower
+
+def bandpower_dict_to_df(bandpower_dict, event_ids):
+
+    temp_data = []
+
+    for event, e_id in event_ids.items():
+        df = pd.DataFrame.from_dict(bandpower_dict[event])
+        df['Sleep Stage Class'] = e_id
+        temp_data.append(df)
+        
+    bandpower_values_df = pd.concat(temp_data, ignore_index=True)
+    return bandpower_values_df
+
+def log_rel_bandpowers(rel_bandpowers_df):
+    log_rel_bandpowers_df = rel_bandpowers_df.copy(deep=True)
+    for band in rel_bandpowers_df.columns[:-1]:
+        log_rel_bandpowers_df[band] = np.log(rel_bandpowers_df[band])
+
+    return log_rel_bandpowers_df
 
 def five_num_summary(data):
     # print(data)
