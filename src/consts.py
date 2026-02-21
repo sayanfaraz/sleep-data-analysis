@@ -1,4 +1,4 @@
-def get_event_id():
+def get_event_ids():
     event_id = {'Sleep stage W': 0,
                 'Sleep stage 1': 1,
                 'Sleep stage 2': 2,

@@ -182,7 +182,7 @@ def five_num_summary(data):
 
 def bandpower_five_num_summary(data):
     ret_five_num_summary = {}
-    for event in consts.get_event_id().keys():
+    for event in consts.get_event_ids().keys():
         event_five_num_summary = {}
         for band in data[event].keys():
             event_five_num_summary[band] = five_num_summary(data[event][band])
