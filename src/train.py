@@ -1,21 +1,25 @@
 
 from src import data_objs, consts, preprocess
 
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# import mne
+# import pprint
+import mlflow
+
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, f1_score, roc_auc_score
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
-from imblearn.over_sampling import SMOTE
 
-import numpy as np
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-# import mne
-# import pprint
-import mlflow
+import lightgbm as lgb
+
+from imblearn.over_sampling import SMOTE
 
 models = {
     "RandomForest": {
@@ -25,8 +29,13 @@ models = {
     "SVM": {
         'model': SVC(probability=True),    #  change to False later, and proba -> decision_function
         'smote': True
+    },
+    "LightGBM": {
+        'model': lgb.LGBMClassifier(
+            objective='multiclass'
+        ),
+        'smote': True
     }
-    # "LightGBM"
 }
 
 def apply_smote(X, y):
