@@ -17,13 +17,6 @@ import matplotlib.pyplot as plt
 # import pprint
 import mlflow
 
-# def train(subject, recording, epoch_duration):
-#     load_data
-
-#     preprocess_data
-
-#     train
-
 models = {
     "RandomForest": RandomForestClassifier(),
     "SVM": SVC(probability=True)    #  change to False later, and proba -> decision_function
@@ -86,14 +79,15 @@ def train():
             train_score = rf.score(X_train, y_train)
             
             y_pred = rf.predict(X_test)
-            y_prob = rf.predict_proba(X_test)[:, 1]  # for AUC
+            y_prob = rf.predict_proba(X_test)  # for AUC
 
             mlflow.log_metrics({
                 'accuracy': accuracy_score(y_test, y_pred),
                 "f1": f1_score(y_test, y_pred, average='weighted'),
                 "precision": precision_score(y_test, y_pred, average='weighted'),
-                "recall": recall_score(y_test, y_pred, average='weighted')
-                # "auc": roc_auc_score(y_test, y_prob, multi_class='ovr', average='weighted'),
+                "recall": recall_score(y_test, y_pred, average='weighted'),
+                "auc_weighted": roc_auc_score(y_test, y_prob, multi_class='ovo', average='weighted'),
+                "auc_macro": roc_auc_score(y_test, y_prob, multi_class='ovo', average='weighted')
             })
 
             
