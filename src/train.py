@@ -1,5 +1,6 @@
 
-from src import data_objs, consts, preprocess
+import src.experiment.evaluation as evaluation
+from src.utils import preprocess, consts, data_objs
 
 import numpy as np
 import pandas as pd
@@ -11,8 +12,9 @@ import matplotlib.pyplot as plt
 import mlflow
 
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
@@ -30,12 +32,17 @@ models = {
         'model': SVC(probability=True),    #  change to False later, and proba -> decision_function
         'smote': True
     },
+    "QuadraticDiscriminantAnalysis": {
+        'model': QuadraticDiscriminantAnalysis(),
+        'smote': True
+    },
     "LightGBM": {
         'model': lgb.LGBMClassifier(
             objective='multiclass'
         ),
         'smote': True
     }
+    # Maybe try a neural net? cuz why not lol
 }
 
 def apply_smote(X, y):
@@ -96,28 +103,16 @@ def train():
                 print("Train ...")
 
                 model.fit(X_train_final, y_train_final)
+                train_score = model.score(X_train_final, y_train_final)
 
                 # Val
-                train_score = model.score(X_train_final, y_train_final)
-                
-                y_pred = model.predict(X_test)
-                y_prob = model.predict_proba(X_test)  # for AUC
-
-                mlflow.log_metrics({
-                    'accuracy': accuracy_score(y_test, y_pred),
-                    "f1_weighted": f1_score(y_test, y_pred, average='weighted'),
-                    "f1_macro": f1_score(y_test, y_pred, average='macro'),
-                    "precision": precision_score(y_test, y_pred, average='weighted'),
-                    "recall": recall_score(y_test, y_pred, average='weighted'),
-                    "auc_weighted": roc_auc_score(y_test, y_prob, multi_class='ovo', average='weighted'),
-                    "auc_macro": roc_auc_score(y_test, y_prob, multi_class='ovo', average='macro')
-                })
-
-                # cm = confusion_matrix(y_test, y_pred)
-                # mlflow.log_metric("cm", cm)
+                evaluation.evaluate(model, X_test, y_test)
 
         # Package models
 
+
+    # cm = confusion_matrix(y_test, y_pred)
+    # mlflow.log_metric("cm", cm)
 
 if __name__ == "__main__":
     train()

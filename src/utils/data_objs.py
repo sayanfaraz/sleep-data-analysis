@@ -1,5 +1,5 @@
-from src import preprocess
-from src import consts
+from src.utils import preprocess
+from src.utils import consts
 
 class EEGRecording:
     def __init__(self, subject, recording_no, raw, annot, epochs, events, sfreq, epoch_duration):

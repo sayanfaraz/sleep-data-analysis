@@ -5,7 +5,7 @@ import warnings
 
 from mne.datasets.sleep_physionet.age import fetch_data
 
-from src import consts
+from src.utils import consts
 
 def load_raw_recording(subjects: list,
                           recording: list,

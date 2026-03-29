@@ -137,3 +137,6 @@ mlruns/
 mlartifacts/
 *.db
 *.sqlite
+
+# Misc
+notebooks/five_num_summ_file.txt
