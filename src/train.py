@@ -1,5 +1,6 @@
 
-import src.experiment.evaluation as evaluation
+import src.experiment.experiments as exp
+import src.experiment.pipeline as pipeline
 from src.utils import preprocess, consts, data_objs
 
 import numpy as np
@@ -9,41 +10,12 @@ import matplotlib.pyplot as plt
 
 # import mne
 # import pprint
-import mlflow
 
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
-from sklearn.svm import SVC
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import StratifiedKFold, cross_val_score
-from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
 
-import lightgbm as lgb
-
 from imblearn.over_sampling import SMOTE
-
-models = {
-    "RandomForest": {
-        'model': RandomForestClassifier(),
-        'smote': False
-    },
-    "SVM": {
-        'model': SVC(probability=True),    #  change to False later, and proba -> decision_function
-        'smote': True
-    },
-    "QuadraticDiscriminantAnalysis": {
-        'model': QuadraticDiscriminantAnalysis(),
-        'smote': True
-    },
-    "LightGBM": {
-        'model': lgb.LGBMClassifier(
-            objective='multiclass'
-        ),
-        'smote': True
-    }
-    # Maybe try a neural net? cuz why not lol
-}
 
 def apply_smote(X, y):
     sm = SMOTE()
@@ -52,8 +24,6 @@ def apply_smote(X, y):
 def train():
     RAND_STATE_INT = 10
     rng = np.random.default_rng()
-
-    mlflow.set_experiment("EEG Classification: Model Family Selection")
 
     # Load Data
     print("Loading data ...")
@@ -76,39 +46,11 @@ def train():
                                                         test_size=0.33,
                                                         random_state=RAND_STATE_INT)
     
-    sm = SMOTE(random_state = RAND_STATE_INT)
-    X_train_smote, y_train_smote = sm.fit_resample(X_train, y_train)
+    # exp.exp_model_screening(pipeline.get_models(), X_train, X_test, y_train, y_test, RAND_STATE_INT)
 
-    for model_name, model_attrs in models.items():
-        model = model_attrs['model']
-        use_smote = model_attrs['smote']
+    exp.exp_model_finetuning(pipeline.get_models(), X_train, X_test, y_train, y_test, RAND_STATE_INT)
 
-        mlflow.sklearn.autolog()
-
-        for smote_on in [False, True]:
-
-            if use_smote==False and smote_on==True:
-                continue
-
-            X_train_final = X_train if smote_on==False else X_train_smote
-            y_train_final = y_train if smote_on==False else y_train_smote
-
-            run_name=f"{model_name}{'__SMOTE' if smote_on else ''}"
-
-            with mlflow.start_run(run_name=run_name):
-                
-                # Hyperparameter search
-                
-                # Train
-                print("Train ...")
-
-                model.fit(X_train_final, y_train_final)
-                train_score = model.score(X_train_final, y_train_final)
-
-                # Val
-                evaluation.evaluate(model, X_test, y_test)
-
-        # Package models
+    # Package models
 
 
     # cm = confusion_matrix(y_test, y_pred)
