@@ -1,4 +1,5 @@
 import src.experiment.evaluation as evaluation
+import src.experiment.pipeline as exp_pipeline
 
 import mlflow
 from imblearn.over_sampling import SMOTE
@@ -63,9 +64,39 @@ def exp_model_finetuning(models, X_train, X_test, y_train, y_test, RAND_STATE_IN
 
             # Val
             evaluation.evaluate(model, X_test, y_test)
-        
 
 def exp_model_screening(models, X_train, X_test, y_train, y_test, RAND_STATE_INT):
+    datasets = exp_pipeline.make_datasets(exp_pipeline.get_samplers(RAND_STATE_INT), X_train, y_train)
+
+    mlflow.set_experiment(get_model_screening_exp_name())
+
+    for config in exp_pipeline.all_configs_generator(RAND_STATE_INT):
+        model_name = config['model']
+        model = exp_pipeline.get_models()[model_name]
+
+        sampler_name = config['sampler']
+
+        run_name=f"{model_name}_{sampler_name if sampler_name!='default' else ''}"
+        print("\n\n\n" + run_name)
+
+        X_train_final, y_train_final = datasets[sampler_name]
+
+        with mlflow.start_run(run_name=run_name):
+            mlflow.sklearn.autolog()
+
+            mlflow.set_tags({
+                "stage": "screening",
+                "sampler": sampler_name,
+                "model_family": model_name
+            })
+
+            model.fit(X_train_final, y_train_final)
+            train_score = model.score(X_train_final, y_train_final)
+
+            # Val
+            evaluation.evaluate(model, X_test, y_test)
+
+def exp_model_screening_old(models, X_train, X_test, y_train, y_test, RAND_STATE_INT):
     sm = SMOTE(random_state = RAND_STATE_INT)
     X_train_smote, y_train_smote = sm.fit_resample(X_train, y_train)
 

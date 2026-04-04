@@ -46,9 +46,9 @@ def train():
                                                         test_size=0.33,
                                                         random_state=RAND_STATE_INT)
     
-    # exp.exp_model_screening(pipeline.get_models(), X_train, X_test, y_train, y_test, RAND_STATE_INT)
+    exp.exp_model_screening(pipeline.get_models(), X_train, X_test, y_train, y_test, RAND_STATE_INT)
 
-    exp.exp_model_finetuning(pipeline.get_models(), X_train, X_test, y_train, y_test, RAND_STATE_INT)
+    # exp.exp_model_finetuning(pipeline.get_models(), X_train, X_test, y_train, y_test, RAND_STATE_INT)
 
     # Package models
 
