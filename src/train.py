@@ -47,8 +47,8 @@ def train():
                                                         random_state=RAND_STATE_INT)
     
     # exp.exp_model_screening(X_train, X_test, y_train, y_test, RAND_STATE_INT)
-
-    exp.exp_model_finetuning(X_train, X_test, y_train, y_test, RAND_STATE_INT)
+    exp.exp_model_hyperparameter_sweep(X_train, y_train, RAND_STATE_INT)
+    # exp.exp_model_finetuning(X_train, X_test, y_train, y_test, RAND_STATE_INT)
 
     # Package models
 
