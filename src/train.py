@@ -57,14 +57,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-class SubjectDataManager():
-
-    def __init__(self, subject: int) -> None:
-        self._subject = subject
-        self._train_recordings = []
-        self._test_recordings = []
-
-    def get_subject(self):
-        return self._subject
