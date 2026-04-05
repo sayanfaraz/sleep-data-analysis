@@ -9,10 +9,6 @@ from sklearn.model_selection import train_test_split
 
 from imblearn.over_sampling import SMOTE
 
-def apply_smote(X, y):
-    sm = SMOTE()
-    return sm.fit_resample(X, y)
-
 def train():
     RAND_STATE_INT = 10
     rng = np.random.default_rng()
