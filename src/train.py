@@ -14,11 +14,11 @@ def train():
     rng = np.random.default_rng()
 
     # Load Data
-    print("Loading data ...")
+    logging.info("--Loading data ...")
     sleep_subj_0 = data_objs.SleepSubject(subject=consts.get_train_subj(), epoch_duration=consts.get_epoch_duration_const())
     recording_data = sleep_subj_0.get_recording(recording_no=consts.get_train_recording())
 
-    print("Bandpower from epochs ...")
+    logging.info("--Bandpower from epochs ...")
     sleep_stage_rel_bandpower, sleep_stage_abs_bandpower = preprocess.bandpowers_from_epochs(
         recording_data.epochs,
         recording_data.raw,
@@ -35,6 +35,8 @@ def train():
                                                         random_state=RAND_STATE_INT)
     train_data = data_objs.Data(X=X_train, y=y_train)
     test_data = data_objs.Data(X=X_test, y=y_test)
+
+    logging.info("--Starting training ...")
 
     # exp.exp_model_screening(train_data, test_data, RAND_STATE_INT)
     # exp.exp_model_hyperparameter_sweep(train_data, test_data, RAND_STATE_INT)

@@ -1,3 +1,5 @@
+import logging
+
 import mne
 import numpy as np
 import pandas as pd
@@ -139,20 +141,15 @@ def bandpower_v(data, sfreq, window=True, relative=True, include_total=False):
     ret_bandpower = {}
     bands = get_bands()
     freq, power = power_spec_v(data, sfreq, window=window, one_sided=True)
-    # print("Freq: ", freq.shape)
-    # print("Power: ", power.shape)
 
     total_power = np.abs(np.trapezoid(power, freq, axis=0))
     div_total_power = total_power if relative else 1.0
-    # print("Total power: ", total_power.shape)
 
     for band, freq_bounds in bands.items():
-        # print("BAND: ", band)
+
         l_ind = np.argwhere(freq>freq_bounds[0])[0, 0]
         h_ind = np.argwhere(freq<=freq_bounds[1])[-1, 0]
-        # print("Ind: ", l_ind, h_ind)
-        # print("Freq: ", freq[l_ind], freq[h_ind])
-        # print("-----------------------------------")
+
         bpow = np.abs(np.trapezoid(power[l_ind:h_ind], freq[l_ind:h_ind], axis=0))
         ret_bandpower[band] = bpow / div_total_power
     if include_total:
@@ -169,12 +166,12 @@ def bandpowers_from_epochs(epochs, raw, event_ids, sfreq, channel):
     sleep_stage_abs_bandpower = {}
 
     for event, e_id in event_ids.items():
-        print(event, "( id", e_id, ")")
+        logging.info(event, "( id", e_id, ")")
         
         # sub_epochs = epochs[event].get_data()
         sub_epochs = epoch_get_data_wo_warning(epochs[event])
 
-        # print("Epoch shape: ", (sub_epochs[:, raw.ch_names.index('EEG Fpz-Cz'), :].T).shape, "\n")
+        logging.debug("Epoch shape: ", (sub_epochs[:, raw.ch_names.index('EEG Fpz-Cz'), :].T).shape, "\n")
         sleep_stage_rel_bandpower[event] = bandpower_v(sub_epochs[:, raw.ch_names.index(channel), :].T, sfreq, relative=True, include_total=False)
         sleep_stage_abs_bandpower[event] = bandpower_v(sub_epochs[:, raw.ch_names.index(channel), :].T, sfreq, relative=False, include_total=True)
 
@@ -200,7 +197,6 @@ def log_rel_bandpowers(rel_bandpowers_df):
     return log_rel_bandpowers_df
 
 def five_num_summary(data):
-    # print(data)
     perc_25 = np.percentile(data, 25)
     perc_50 = np.percentile(data, 50)
     perc_75 = np.percentile(data, 75)
