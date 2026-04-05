@@ -1,18 +1,10 @@
 
 import src.experiment.experiments as exp
-import src.experiment.pipeline as pipeline
 from src.utils import preprocess, consts, data_objs
 
 import numpy as np
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
+import logging
 
-# import mne
-# import pprint
-
-from sklearn.metrics import confusion_matrix
-from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.model_selection import train_test_split
 
 from imblearn.over_sampling import SMOTE
@@ -53,9 +45,14 @@ def train():
     exp.exp_model_finetuning(train_data, test_data, RAND_STATE_INT)
 
     # Package models
-    
 
 def main():
+    logging.basicConfig(
+        format="{asctime} - {levelname} - {message}",
+        style="{",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        level=logging.INFO
+    )
     train()
 
 if __name__ == "__main__":

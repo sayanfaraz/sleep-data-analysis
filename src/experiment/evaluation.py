@@ -14,4 +14,4 @@ def evaluate(model, X_test, y_test):
         "recall": recall_score(y_test, y_pred, average='weighted'),
         "auc_weighted": roc_auc_score(y_test, y_prob, multi_class='ovo', average='weighted'),
         "auc_macro": roc_auc_score(y_test, y_prob, multi_class='ovo', average='macro')
-    })
+    }) # type: ignore

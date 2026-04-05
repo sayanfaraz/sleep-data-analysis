@@ -1,4 +1,5 @@
 import src.utils.data_objs as dobjs
+import dataclasses
 
 import lightgbm as lgb
 import numpy as np
@@ -15,6 +16,11 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 
 from itertools import product
+
+@dataclasses.dataclass
+class PipelineAttrs:
+    model_name: str
+    sampler_name: str
 
 def exclusions():
     # TODO: integrate exclusions

@@ -1,15 +1,14 @@
-import src.experiment.evaluation as evaluation
+import src.experiment.evaluation as exp_evaluation
 import src.experiment.pipeline as exp_pipeline
 
 from src.utils import data_objs as dobjs
 
+import logging
 import numpy as np
 import mlflow
 import optuna
 import json
 import lightgbm as lgb
-
-from imblearn.over_sampling import SMOTE
 
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.metrics import f1_score
@@ -35,6 +34,100 @@ def get_hyp_sweep_ntrials():
 def get_hyp_sweep_kfolds():
     return 5
 
+def exp_model_hyperparameter_sweep(dtrain: dobjs.Data, RAND_STATE_INT):
+    optuna.logging.set_verbosity(optuna.logging.WARNING) 
+    
+    top_n_models = load_top_n_models(top_n())
+
+    # TODO: put imbalanced-resampling into objective so its inside CV, not outside -> X_val will only have real values
+    # TODO: to do ^, use an ImbPipeline (SMOTE -> model)
+    datasets = exp_pipeline.make_datasets(exp_pipeline.get_samplers(RAND_STATE_INT), dtrain)    
+
+    mlflow.set_experiment(get_model_hyperparameters_exp_name())
+    logging.info(f"Starting Experiment: {get_model_hyperparameters_exp_name()}")
+    for model_metadata in top_n_models:
+        pipeline_attrs = exp_pipeline.PipelineAttrs(model_name=model_metadata['tags.model_family'],
+                                                    sampler_name=model_metadata['tags.sampler'])
+
+        train_final: dobjs.Data = datasets[pipeline_attrs.sampler_name]
+
+        run_name = make_run_name(pipeline_attrs, exp_type="hyperparam_sweep")
+        logging.info(f"\n{run_name}, f1_macro: {str(model_metadata['metrics.f1_macro'])}")
+
+        study = optuna.create_study(direction='maximize')
+        objective = make_objective(pipeline_attrs.model_name, train_final, RAND_STATE_INT,
+                                   scoring="f1_macro",
+                                   kfolds=get_hyp_sweep_kfolds()) # should be 10
+        study.optimize(objective, n_trials=get_hyp_sweep_ntrials(), n_jobs=-1)  # should be 100
+
+        # 4. Results
+        logging.info(f"Best params: {study.best_params}")
+        logging.info(f"Best score: {study.best_value}")
+
+        with mlflow.start_run(run_name=run_name):
+            mlflow.set_tags(make_mlflow_tags(
+                pipeline_attrs,
+                stage="hyperparam_sweep")
+            )
+
+            mlflow.log_dict(study.best_params, get_best_params_filename())
+            mlflow.log_params(study.best_params)
+            mlflow.log_metric("best_f1score", study.best_value)
+
+            if pipeline_attrs.model_name=="LightGBM":
+                best_trial = study.best_trial
+                mlflow.log_param("refit_n_estimators", best_trial.user_attrs["mean_best_iteration"])
+
+def exp_model_finetuning(dtrain: dobjs.Data, dtest: dobjs.Data, RAND_STATE_INT):
+    top_models_metadata = load_best_hyperparams()
+
+    datasets = exp_pipeline.make_datasets(exp_pipeline.get_samplers(RAND_STATE_INT), dtrain)
+
+    mlflow.set_experiment(get_model_finetuning_exp_name())
+    logging.info(f"Starting Experiment: {get_model_finetuning_exp_name()}")
+    mlflow.sklearn.autolog()  # pyright: ignore[reportPrivateImportUsage]
+
+    for model_metadata in top_models_metadata:                                                   
+        pipeline_attrs, model = model_from_hyperparam_metadata(model_metadata)
+
+        train_final: dobjs.Data = datasets[pipeline_attrs.sampler_name]
+
+        run_name = make_run_name(pipeline_attrs, exp_type="finetune")
+        logging.info(f"\n{run_name}")
+
+        with mlflow.start_run(run_name=run_name):
+            mlflow.set_tags(make_mlflow_tags(
+                pipeline_attrs,
+                stage="finetuning")
+            )
+
+            train_and_eval(model, train_final, dtest)
+
+def exp_model_screening(dtrain: dobjs.Data, dtest: dobjs.Data, RAND_STATE_INT):
+    datasets = exp_pipeline.make_datasets(exp_pipeline.get_samplers(RAND_STATE_INT), dtrain)
+
+    mlflow.set_experiment(get_model_screening_exp_name())
+    logging.info(f"Starting Experiment: {get_model_screening_exp_name()}")
+
+    for config in exp_pipeline.all_configs_generator(RAND_STATE_INT):
+        pipeline_attrs = exp_pipeline.PipelineAttrs(config['model'], config['sampler'])
+
+        model = exp_pipeline.get_models()[pipeline_attrs.model_name]
+        train_final: dobjs.Data = datasets[pipeline_attrs.sampler_name]
+
+        run_name = make_run_name(pipeline_attrs, exp_type="")
+        logging.info(f"\n{run_name}")
+
+        with mlflow.start_run(run_name=run_name):
+            mlflow.sklearn.autolog() # pyright: ignore[reportPrivateImportUsage]
+
+            mlflow.set_tags(make_mlflow_tags(
+                pipeline_attrs,
+                stage="screening")
+            )
+
+            train_and_eval(model, train_final, dtest)
+
 def load_top_n_models(n):
     top_n_models = []
     
@@ -44,7 +137,7 @@ def load_top_n_models(n):
         order_by=["metrics.f1_macro DESC"]
     )
 
-    for i, run in runs.head(n).iterrows():
+    for i, run in runs.head(n).iterrows(): # type: ignore - We know its a pd.DataFrame based on mlflow.search_runs
         top_n_models.append(run)
 
     return top_n_models
@@ -54,9 +147,9 @@ def load_best_hyperparams():
     runs = mlflow.search_runs(
         experiment_names=[get_model_hyperparameters_exp_name()]
     )
-    client = mlflow.tracking.MlflowClient()
+    client = mlflow.tracking.MlflowClient() # pyright: ignore[reportPrivateImportUsage]
 
-    for i, run in runs.iterrows():
+    for i, run in runs.iterrows(): # type: ignore - We know its a pd.DataFrame based on mlflow.search_runs
         best_params_f = client.download_artifacts(run['run_id'], get_best_params_filename())
         model_family = run['tags.model_family']
         with open(best_params_f) as f:
@@ -66,10 +159,6 @@ def load_best_hyperparams():
             metadata["best_params"] = best_params
 
             best_params_per_model.append(metadata)
-
-            print(model_family)
-            print(best_params)
-            print("\n\n")
 
     return best_params_per_model
 
@@ -87,8 +176,8 @@ def lgb_objective(trial, model_name, dtrain: dobjs.Data, n_splits, rand_state):
     best_iterations = []
 
     for train_idx, val_idx in cv.split(dtrain.X, dtrain.y):
-        X_fold_train, X_val = dtrain.X.iloc[train_idx], dtrain.X.iloc[val_idx]
-        y_fold_train, y_val = dtrain.y.iloc[train_idx], dtrain.y.iloc[val_idx]
+        X_fold_train, X_val = dtrain.X.iloc[train_idx], dtrain.X.iloc[val_idx] # type: ignore
+        y_fold_train, y_val = dtrain.y.iloc[train_idx], dtrain.y.iloc[val_idx] # type: ignore
 
         model = exp_pipeline.get_models()[model_name]
         model.set_params(**params)
@@ -130,13 +219,14 @@ def make_objective(model_name, dtrain: dobjs.Data, RAND_STATE_INT, scoring, kfol
     return lgb_obj if model_name=="LightGBM" else objective
 
 def model_from_hyperparam_metadata(model_metadata):
+    pipeline_attrs = exp_pipeline.PipelineAttrs(model_name=model_metadata['tags.model_family'],
+                                                sampler_name=model_metadata['tags.sampler'])
     params = model_metadata['best_params']
-    model_name = model_metadata['tags.model_family']
 
-    model = exp_pipeline.get_models()[model_name]
+    model = exp_pipeline.get_models()[pipeline_attrs.model_name]
     model.set_params(**params)
 
-    if model_name=="LightGBM":
+    if pipeline_attrs.model_name=="LightGBM":
         refit_n_estimators = int(model_metadata["params.refit_n_estimators"])
         model.set_params(**{
             "learning_rate": 0.05,
@@ -144,109 +234,29 @@ def model_from_hyperparam_metadata(model_metadata):
             "verbosity": -1
         })
 
-    return model_name, model
+    return pipeline_attrs, model
 
 def train_and_eval(model, dtrain, dtest):
     model.fit(dtrain.X, dtrain.y)
     train_score = model.score(dtrain.X, dtrain.y)
 
-    evaluation.evaluate(model, dtest.X, dtest.y)
-    
+    exp_evaluation.evaluate(model, dtest.X, dtest.y)
+
     # cm = confusion_matrix(y_test, y_pred)
     # mlflow.log_metric("cm", cm)
 
-def exp_model_hyperparameter_sweep(dtrain: dobjs.Data, RAND_STATE_INT):
-    optuna.logging.set_verbosity(optuna.logging.WARNING) 
-    
-    top_n_models = load_top_n_models(top_n())
+def make_mlflow_tags(pipeline_attrs, stage) -> dict:
 
-    # TODO: put imbalanced-resampling into objective so its inside CV, not outside -> X_val will only have real values
-    # TODO: to do ^, use an ImbPipeline (SMOTE -> model)
-    datasets = exp_pipeline.make_datasets(exp_pipeline.get_samplers(RAND_STATE_INT), dtrain)    
+    return {
+                "stage": stage,
+                "sampler": pipeline_attrs.sampler_name,
+                "model_family": pipeline_attrs.model_name
+    }
 
-    mlflow.set_experiment(get_model_hyperparameters_exp_name())
-    for model_metadata in top_n_models:
-        model_name = model_metadata['tags.model_family']
+def make_run_name(pipeline_attrs: exp_pipeline.PipelineAttrs, exp_type: str="") -> str:
+    model_name = pipeline_attrs.model_name
+    sampler_name = pipeline_attrs.sampler_name
 
-        sampler_name = model_metadata['tags.sampler']
-        train_final: dobjs.Data = datasets[sampler_name]
+    run_name=f"{model_name}_{exp_type}{"__" if exp_type!="" else ""}{sampler_name if sampler_name!='default' else ''}"
 
-        run_name=f"{model_name}_hyperparam_sweep__{sampler_name if sampler_name!='default' else ''}"
-        print("\n\n\n" + run_name + ", f1_macro: " + str(model_metadata['metrics.f1_macro']))
-
-        study = optuna.create_study(direction='maximize')
-        objective = make_objective(model_name, train_final, RAND_STATE_INT,
-                                   scoring="f1_macro",
-                                   kfolds=get_hyp_sweep_kfolds()) # should be 10
-        study.optimize(objective, n_trials=get_hyp_sweep_ntrials(), n_jobs=-1)  # should be 100
-
-        # 4. Results
-        print("Best params:", study.best_params)
-        print("Best score: ", study.best_value)
-
-        with mlflow.start_run(run_name=run_name):
-            mlflow.set_tags({
-                "stage": "hyperparam_sweep",
-                "sampler": sampler_name,
-                "model_family": model_name
-            })
-
-            mlflow.log_dict(study.best_params, get_best_params_filename())
-            mlflow.log_params(study.best_params)
-            mlflow.log_metric("best_f1score", study.best_value)
-
-            if model_name=="LightGBM":
-                best_trial = study.best_trial
-                mlflow.log_param("refit_n_estimators", best_trial.user_attrs["mean_best_iteration"])
-
-def exp_model_finetuning(dtrain: dobjs.Data, dtest: dobjs.Data, RAND_STATE_INT):
-    top_models_metadata = load_best_hyperparams()
-
-    datasets = exp_pipeline.make_datasets(exp_pipeline.get_samplers(RAND_STATE_INT), dtrain)
-
-    mlflow.set_experiment(get_model_finetuning_exp_name())
-    mlflow.sklearn.autolog()  # pyright: ignore[reportPrivateImportUsage]
-
-    for model_metadata in top_models_metadata:
-        model_name, model = model_from_hyperparam_metadata(model_metadata)
-        
-        sampler_name = model_metadata['tags.sampler']
-        train_final: dobjs.Data = datasets[sampler_name]
-
-        run_name=f"{model_name}_finetune__{sampler_name if sampler_name!='default' else ''}"
-
-        with mlflow.start_run(run_name=run_name):
-            mlflow.set_tags({
-                "stage": "finetuning",
-                "sampler": sampler_name,
-                "model_family": model_name
-            })
-
-            train_and_eval(model, train_final, dtest)
-
-def exp_model_screening(dtrain: dobjs.Data, dtest: dobjs.Data, RAND_STATE_INT):
-    datasets = exp_pipeline.make_datasets(exp_pipeline.get_samplers(RAND_STATE_INT), dtrain)
-
-    mlflow.set_experiment(get_model_screening_exp_name())
-
-    for config in exp_pipeline.all_configs_generator(RAND_STATE_INT):
-        model_name = config['model']
-        model = exp_pipeline.get_models()[model_name]
-
-        sampler_name = config['sampler']
-
-        run_name=f"{model_name}_{sampler_name if sampler_name!='default' else ''}"
-        print("\n\n\n" + run_name)
-
-        train_final: dobjs.Data = datasets[sampler_name]
-
-        with mlflow.start_run(run_name=run_name):
-            mlflow.sklearn.autolog() # pyright: ignore[reportPrivateImportUsage]
-
-            mlflow.set_tags({
-                "stage": "screening",
-                "sampler": sampler_name,
-                "model_family": model_name
-            })
-
-            train_and_eval(model, train_final, dtest)
+    return run_name
