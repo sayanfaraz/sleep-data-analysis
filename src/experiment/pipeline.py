@@ -55,10 +55,10 @@ def make_datasets(samplers: dict, X_train, y_train):
 
 def get_models():
     models = {
-        "RandomForest": RandomForestClassifier(),
+        "RandomForest": RandomForestClassifier(n_jobs=-1),
         "SVM": SVC(probability=True),    #  change to False later, and proba -> decision_function
         "QuadraticDiscriminantAnalysis": QuadraticDiscriminantAnalysis(reg_param=0.2),  # need to tune
-        "LightGBM": lgb.LGBMClassifier(objective='multiclass', verbosity=-1)
+        "LightGBM": lgb.LGBMClassifier(objective='multiclass', verbosity=-1, n_jobs=-1)
         # Maybe try a neural net? cuz why not lol
         # Try an ensemble eventually
     }

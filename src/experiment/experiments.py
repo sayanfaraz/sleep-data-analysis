@@ -29,6 +29,12 @@ def get_best_params_filename():
 def top_n():
     return 3
 
+def get_hyp_sweep_ntrials():
+    return 50
+
+def get_hyp_sweep_kfolds():
+    return 5
+
 def load_top_n_models(n):
     top_n_models = []
     
@@ -114,7 +120,8 @@ def make_objective(model_name, X_train, y_train, RAND_STATE_INT, scoring, kfolds
         model = exp_pipeline.get_models()[model_name]
         model.set_params(**param_sweep)
 
-        score = cross_val_score(model, X_train, y_train, cv=kfolds, scoring=scoring).mean()   # TODO: change cv to at least 10
+        cv = StratifiedKFold(n_splits=kfolds, shuffle=True, random_state=RAND_STATE_INT) #TODO: Use TimeSeriesSplit to avoid temporal correlations
+        score = cross_val_score(model, X_train, y_train, cv=cv, scoring=scoring, n_jobs=-1).mean()   # TODO: change cv to at least 10
         return score
     
     def lgb_obj(trial):
@@ -142,8 +149,8 @@ def exp_model_hyperparameter_sweep(X_train, y_train, RAND_STATE_INT):
         study = optuna.create_study(direction='maximize')
         objective = make_objective(model_name, X_train_final, y_train_final, RAND_STATE_INT,
                                    scoring="f1_macro",
-                                   kfolds=10) # should be 10
-        study.optimize(objective, n_trials=100)  # should be 100
+                                   kfolds=get_hyp_sweep_kfolds()) # should be 10
+        study.optimize(objective, n_trials=get_hyp_sweep_ntrials(), n_jobs=-1)  # should be 100
 
         # 4. Results
         print("Best params:", study.best_params)
