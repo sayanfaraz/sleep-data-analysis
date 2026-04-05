@@ -47,8 +47,8 @@ def train():
                                                         random_state=RAND_STATE_INT)
     
     # exp.exp_model_screening(X_train, X_test, y_train, y_test, RAND_STATE_INT)
-    exp.exp_model_hyperparameter_sweep(X_train, y_train, RAND_STATE_INT)
-    # exp.exp_model_finetuning(X_train, X_test, y_train, y_test, RAND_STATE_INT)
+    # exp.exp_model_hyperparameter_sweep(X_train, y_train, RAND_STATE_INT)
+    exp.exp_model_finetuning(X_train, X_test, y_train, y_test, RAND_STATE_INT)
 
     # Package models
 
@@ -57,8 +57,8 @@ def train():
     # mlflow.log_metric("cm", cm)
 
 def main():
-    # train()
-    exp.load_best_hyperparams()
+    train()
+    # exp.load_best_hyperparams()
 
 if __name__ == "__main__":
     train()

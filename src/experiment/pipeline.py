@@ -64,27 +64,42 @@ def get_models():
     }
     return models
 
-def get_tuning_params(trial: optuna.Trial, X_train, y_train, RAND_STATE_INT):
-    ccp_alphas = calc_randforest_ccp_range(X_train, y_train, RAND_STATE_INT)
-
-    params = {
-        "RandomForest": {
+def get_tuning_params(trial: optuna.Trial, model_name, X_train, y_train, RAND_STATE_INT):
+    all_params = {
+        "RandomForest": lambda: {
             'n_estimators': trial.suggest_int('n_estimators', low=100, high=1000, log=True),
-            # 'min_samples_leaf': trial.suggest_int('min_samples_leaf', low=1, high=100),  # TODO: change to dependent on |X_train|
-            'ccp_alpha': trial.suggest_categorical('ccp_alpha', ccp_alphas), # Categorical because model only changes for values in ccp_alphas
-            'max_features': trial.suggest_categorical('max_features', ['sqrt', 'log2'])
+            'min_samples_leaf': trial.suggest_int('min_samples_leaf', low=1, high=100),  # TODO: change to dependent on |X_train|
+            'max_features': trial.suggest_categorical('max_features', ['sqrt', 'log2']),
+            'max_depth': trial.suggest_int("max_depth", 4, 40)
+            
+            # 'class_weight'
+            # 'ccp_alpha': trial.suggest_categorical('ccp_alpha', calc_randforest_ccp_range(X_train, y_train, RAND_STATE_INT)), # Categorical because model only changes for values in ccp_alphas
         },
-        "SVM": {
+        "SVM": lambda: {
             "C": trial.suggest_float("C", low=1e-3, high=1e3, log=True),
+            "gamma": trial.suggest_float("gamma", low=1e-5, high=1, log=True),
+            # 'class_weight'
+
+            # "degree": trial.suggest_int("degree", low=2, high=7)   #  im using rbf rn not poly - can fix later
         },
-        "QuadraticDiscriminantAnalysis": {
+        "QuadraticDiscriminantAnalysis": lambda: {
             "reg_param": trial.suggest_float("reg_param", low=0.0, high=1.0),
         },
-        "LightGBM": {
-            "min_child_samples": trial.suggest_int("min_child_samples", low=5, high=200, log=True)
+        "LightGBM": lambda: {
+            "num_leaves": trial.suggest_int("num_leaves", low=20, high=300),
+            "min_child_samples": trial.suggest_int("min_child_samples", low=5, high=200, log=True),
+            
+            "subsample": trial.suggest_float("subsample", low=0.5, high=1.),
+            "subsample_freq": 1,
+            "colsample_bytree": 1, # We only have 5 features lol
+
+            "reg_alpha": trial.suggest_float("reg_alpha", low=1e-8, high=10., log=True), # L1
+            "reg_lambda": trial.suggest_float("reg_lambda", low=1e-8, high=10., log=True) # L2
+
+            # 'class_weight'
         }
     }
-    return params
+    return all_params[model_name]()
 
 def calc_randforest_ccp_range(X_train, y_train, RAND_STATE_INT):
     tree = DecisionTreeClassifier(random_state=RAND_STATE_INT)
