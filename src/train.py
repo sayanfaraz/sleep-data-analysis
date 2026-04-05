@@ -56,6 +56,10 @@ def train():
     # cm = confusion_matrix(y_test, y_pred)
     # mlflow.log_metric("cm", cm)
 
+def main():
+    # train()
+    exp.load_best_hyperparams()
+
 if __name__ == "__main__":
     train()
 
