@@ -1,3 +1,5 @@
+import src.utils.data_objs as dobjs
+
 import lightgbm as lgb
 import numpy as np
 import sklearn.preprocessing
@@ -15,6 +17,7 @@ from sklearn.tree import DecisionTreeClassifier
 from itertools import product
 
 def exclusions():
+    # TODO: integrate exclusions
     return [
         {'model': 'RandomForest', 'sampler': 'SMOTE'},
         {'model': 'RandomForest', 'scaler': 'log'},
@@ -41,13 +44,16 @@ def get_samplers(rand_int):
     }
     return samplers
 
-def make_datasets(samplers: dict, X_train, y_train):
+def make_datasets(samplers: dict, dtrain: dobjs.Data) -> dict:
     datasets = {}
     for sampler_name, sampler in samplers.items():
-        datasets[sampler_name] = sampler.fit_resample(X_train, y_train)
+        new_X, new_y = sampler.fit_resample(dtrain.X, dtrain.y)
+        new_dtrain = dobjs.Data(new_X, new_y)
+
+        datasets[sampler_name] = new_dtrain
     return datasets
 
-# def config_to_pipeline(config, X_train, y_train):
+# def config_to_pipeline(config, dtrain: dobjs.Data):
 #     return ImbPipeline(steps=[
 #         ('scaler': config['scaler']),
 #         ('model': )
@@ -65,7 +71,7 @@ def get_models():
     }
     return models
 
-def get_tuning_params(trial: optuna.Trial, model_name, X_train, y_train, RAND_STATE_INT):
+def get_tuning_params(trial: optuna.Trial, model_name, dtrain: dobjs.Data, RAND_STATE_INT):
     all_params = {
         "RandomForest": lambda: {
             'n_estimators': trial.suggest_int('n_estimators', low=100, high=1000, log=True),
@@ -74,7 +80,7 @@ def get_tuning_params(trial: optuna.Trial, model_name, X_train, y_train, RAND_ST
             'max_depth': trial.suggest_int("max_depth", 4, 40)
             
             # 'class_weight'
-            # 'ccp_alpha': trial.suggest_categorical('ccp_alpha', calc_randforest_ccp_range(X_train, y_train, RAND_STATE_INT)), # Categorical because model only changes for values in ccp_alphas
+            # 'ccp_alpha': trial.suggest_categorical('ccp_alpha', calc_randforest_ccp_range(dtrain.X, dtrain.y, RAND_STATE_INT)), # Categorical because model only changes for values in ccp_alphas
         },
         "SVM": lambda: {
             "C": trial.suggest_float("C", low=1e-3, high=1e3, log=True),
@@ -102,9 +108,9 @@ def get_tuning_params(trial: optuna.Trial, model_name, X_train, y_train, RAND_ST
     }
     return all_params[model_name]()
 
-def calc_randforest_ccp_range(X_train, y_train, RAND_STATE_INT):
+def calc_randforest_ccp_range(dtrain: dobjs.Data, RAND_STATE_INT):
     tree = DecisionTreeClassifier(random_state=RAND_STATE_INT)
-    ccp_path = tree.cost_complexity_pruning_path(X_train, y_train)
+    ccp_path = tree.cost_complexity_pruning_path(dtrain.X, dtrain.y)
 
     ccp_alphas = ccp_path.ccp_alphas
     ccp_alphas = np.unique(ccp_alphas[ccp_alphas > 0]) # Unique alphas only, > 0

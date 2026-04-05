@@ -1,6 +1,8 @@
 import src.experiment.evaluation as evaluation
 import src.experiment.pipeline as exp_pipeline
 
+from src.utils import data_objs as dobjs
+
 import numpy as np
 import mlflow
 import optuna
@@ -14,14 +16,12 @@ from sklearn.metrics import f1_score
 
 def get_model_screening_exp_name():
     return "EEG_Classification-Model_Family_Screening"
-    # return "Default_Name"
 
 def get_model_hyperparameters_exp_name():
     return "EEG_Classification-Model_Hyperparameter_Sweep"
 
 def get_model_finetuning_exp_name():
     return "EEG_Classification-Model_Finetuning"
-    # return "Default_Name"
 
 def get_best_params_filename():
     return "best_params.json"
@@ -73,8 +73,8 @@ def load_best_hyperparams():
 
     return best_params_per_model
 
-def lgb_objective(trial, model_name, X_train, y_train, n_splits, rand_state):
-    params = exp_pipeline.get_tuning_params(trial, "LightGBM", X_train, y_train, rand_state)
+def lgb_objective(trial, model_name, dtrain: dobjs.Data, n_splits, rand_state):
+    params = exp_pipeline.get_tuning_params(trial, "LightGBM", dtrain, rand_state)
     params.update({
         "learning_rate": 0.05,      # fixed
         "n_estimators":  2000,      # high ceiling — early stopping will cut this down
@@ -86,9 +86,9 @@ def lgb_objective(trial, model_name, X_train, y_train, n_splits, rand_state):
     fold_scores = []
     best_iterations = []
 
-    for train_idx, val_idx in cv.split(X_train, y_train):
-        X_fold_train, X_val = X_train.iloc[train_idx], X_train.iloc[val_idx]
-        y_fold_train, y_val = y_train.iloc[train_idx], y_train.iloc[val_idx]
+    for train_idx, val_idx in cv.split(dtrain.X, dtrain.y):
+        X_fold_train, X_val = dtrain.X.iloc[train_idx], dtrain.X.iloc[val_idx]
+        y_fold_train, y_val = dtrain.y.iloc[train_idx], dtrain.y.iloc[val_idx]
 
         model = exp_pipeline.get_models()[model_name]
         model.set_params(**params)
@@ -113,43 +113,69 @@ def lgb_objective(trial, model_name, X_train, y_train, n_splits, rand_state):
 
     return mean_score
 
-def make_objective(model_name, X_train, y_train, RAND_STATE_INT, scoring, kfolds):
+def make_objective(model_name, dtrain: dobjs.Data, RAND_STATE_INT, scoring, kfolds):
     def objective(trial):
-        param_sweep = exp_pipeline.get_tuning_params(trial, model_name, X_train, y_train, RAND_STATE_INT)
+        param_sweep = exp_pipeline.get_tuning_params(trial, model_name, dtrain, RAND_STATE_INT)
 
         model = exp_pipeline.get_models()[model_name]
         model.set_params(**param_sweep)
 
         cv = StratifiedKFold(n_splits=kfolds, shuffle=True, random_state=RAND_STATE_INT) #TODO: Use TimeSeriesSplit to avoid temporal correlations
-        score = cross_val_score(model, X_train, y_train, cv=cv, scoring=scoring, n_jobs=-1).mean()   # TODO: change cv to at least 10
+        score = cross_val_score(model, dtrain.X, dtrain.y, cv=cv, scoring=scoring, n_jobs=-1).mean()   # TODO: change cv to at least 10
         return score
     
     def lgb_obj(trial):
-        return lgb_objective(trial, model_name, X_train, y_train, n_splits=kfolds, rand_state=RAND_STATE_INT)
+        return lgb_objective(trial, model_name, dtrain, n_splits=kfolds, rand_state=RAND_STATE_INT)
 
     return lgb_obj if model_name=="LightGBM" else objective
 
-def exp_model_hyperparameter_sweep(X_train, y_train, RAND_STATE_INT):
+def model_from_hyperparam_metadata(model_metadata):
+    params = model_metadata['best_params']
+    model_name = model_metadata['tags.model_family']
+
+    model = exp_pipeline.get_models()[model_name]
+    model.set_params(**params)
+
+    if model_name=="LightGBM":
+        refit_n_estimators = int(model_metadata["params.refit_n_estimators"])
+        model.set_params(**{
+            "learning_rate": 0.05,
+            "n_estimators": refit_n_estimators,
+            "verbosity": -1
+        })
+
+    return model_name, model
+
+def train_and_eval(model, dtrain, dtest):
+    model.fit(dtrain.X, dtrain.y)
+    train_score = model.score(dtrain.X, dtrain.y)
+
+    evaluation.evaluate(model, dtest.X, dtest.y)
+    
+    # cm = confusion_matrix(y_test, y_pred)
+    # mlflow.log_metric("cm", cm)
+
+def exp_model_hyperparameter_sweep(dtrain: dobjs.Data, RAND_STATE_INT):
     optuna.logging.set_verbosity(optuna.logging.WARNING) 
     
     top_n_models = load_top_n_models(top_n())
 
     # TODO: put imbalanced-resampling into objective so its inside CV, not outside -> X_val will only have real values
     # TODO: to do ^, use an ImbPipeline (SMOTE -> model)
-    datasets = exp_pipeline.make_datasets(exp_pipeline.get_samplers(RAND_STATE_INT), X_train, y_train)    
+    datasets = exp_pipeline.make_datasets(exp_pipeline.get_samplers(RAND_STATE_INT), dtrain)    
 
     mlflow.set_experiment(get_model_hyperparameters_exp_name())
     for model_metadata in top_n_models:
         model_name = model_metadata['tags.model_family']
 
         sampler_name = model_metadata['tags.sampler']
-        X_train_final, y_train_final = datasets[sampler_name]
+        train_final: dobjs.Data = datasets[sampler_name]
 
         run_name=f"{model_name}_hyperparam_sweep__{sampler_name if sampler_name!='default' else ''}"
         print("\n\n\n" + run_name + ", f1_macro: " + str(model_metadata['metrics.f1_macro']))
 
         study = optuna.create_study(direction='maximize')
-        objective = make_objective(model_name, X_train_final, y_train_final, RAND_STATE_INT,
+        objective = make_objective(model_name, train_final, RAND_STATE_INT,
                                    scoring="f1_macro",
                                    kfolds=get_hyp_sweep_kfolds()) # should be 10
         study.optimize(objective, n_trials=get_hyp_sweep_ntrials(), n_jobs=-1)  # should be 100
@@ -172,37 +198,20 @@ def exp_model_hyperparameter_sweep(X_train, y_train, RAND_STATE_INT):
             if model_name=="LightGBM":
                 best_trial = study.best_trial
                 mlflow.log_param("refit_n_estimators", best_trial.user_attrs["mean_best_iteration"])
-        
-def model_from_hyperparam_metadata(model_metadata):
-    params = model_metadata['best_params']
-    model_name = model_metadata['tags.model_family']
 
-    model = exp_pipeline.get_models()[model_name]
-    model.set_params(**params)
-
-    if model_name=="LightGBM":
-        refit_n_estimators = int(model_metadata["params.refit_n_estimators"])
-        model.set_params(**{
-            "learning_rate": 0.05,
-            "n_estimators": refit_n_estimators,
-            "verbosity": -1
-        })
-
-    return model_name, model
-
-def exp_model_finetuning(X_train, X_test, y_train, y_test, RAND_STATE_INT):
+def exp_model_finetuning(dtrain: dobjs.Data, dtest: dobjs.Data, RAND_STATE_INT):
     top_models_metadata = load_best_hyperparams()
 
-    datasets = exp_pipeline.make_datasets(exp_pipeline.get_samplers(RAND_STATE_INT), X_train, y_train)
+    datasets = exp_pipeline.make_datasets(exp_pipeline.get_samplers(RAND_STATE_INT), dtrain)
 
     mlflow.set_experiment(get_model_finetuning_exp_name())
-    mlflow.sklearn.autolog()
+    mlflow.sklearn.autolog()  # pyright: ignore[reportPrivateImportUsage]
 
     for model_metadata in top_models_metadata:
         model_name, model = model_from_hyperparam_metadata(model_metadata)
         
         sampler_name = model_metadata['tags.sampler']
-        X_train_final, y_train_final = datasets[sampler_name]
+        train_final: dobjs.Data = datasets[sampler_name]
 
         run_name=f"{model_name}_finetune__{sampler_name if sampler_name!='default' else ''}"
 
@@ -213,14 +222,10 @@ def exp_model_finetuning(X_train, X_test, y_train, y_test, RAND_STATE_INT):
                 "model_family": model_name
             })
 
-            model.fit(X_train_final, y_train_final)
-            train_score = model.score(X_train_final, y_train_final)
+            train_and_eval(model, train_final, dtest)
 
-            # Val
-            evaluation.evaluate(model, X_test, y_test)
-
-def exp_model_screening(X_train, X_test, y_train, y_test, RAND_STATE_INT):
-    datasets = exp_pipeline.make_datasets(exp_pipeline.get_samplers(RAND_STATE_INT), X_train, y_train)
+def exp_model_screening(dtrain: dobjs.Data, dtest: dobjs.Data, RAND_STATE_INT):
+    datasets = exp_pipeline.make_datasets(exp_pipeline.get_samplers(RAND_STATE_INT), dtrain)
 
     mlflow.set_experiment(get_model_screening_exp_name())
 
@@ -233,10 +238,10 @@ def exp_model_screening(X_train, X_test, y_train, y_test, RAND_STATE_INT):
         run_name=f"{model_name}_{sampler_name if sampler_name!='default' else ''}"
         print("\n\n\n" + run_name)
 
-        X_train_final, y_train_final = datasets[sampler_name]
+        train_final: dobjs.Data = datasets[sampler_name]
 
         with mlflow.start_run(run_name=run_name):
-            mlflow.sklearn.autolog()
+            mlflow.sklearn.autolog() # pyright: ignore[reportPrivateImportUsage]
 
             mlflow.set_tags({
                 "stage": "screening",
@@ -244,8 +249,4 @@ def exp_model_screening(X_train, X_test, y_train, y_test, RAND_STATE_INT):
                 "model_family": model_name
             })
 
-            model.fit(X_train_final, y_train_final)
-            train_score = model.score(X_train_final, y_train_final)
-
-            # Val
-            evaluation.evaluate(model, X_test, y_test)
+            train_and_eval(model, train_final, dtest)

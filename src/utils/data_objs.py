@@ -1,3 +1,9 @@
+import dataclasses
+import typing
+
+import numpy as np
+import pandas as pd
+
 from src.utils import preprocess
 from src.utils import consts
 
@@ -52,3 +58,10 @@ class SleepSubject:
             )
 
         return self._recordings[recording_no]
+
+DataArrayType = typing.Union[np.ndarray, pd.DataFrame]
+
+@dataclasses.dataclass
+class Data:
+    X: DataArrayType
+    y: typing.Union[DataArrayType, pd.Series]

@@ -45,23 +45,21 @@ def train():
                                                         dataset_df[list(dataset_df.columns)[-1]],
                                                         test_size=0.33,
                                                         random_state=RAND_STATE_INT)
-    
-    # exp.exp_model_screening(X_train, X_test, y_train, y_test, RAND_STATE_INT)
-    exp.exp_model_hyperparameter_sweep(X_train, y_train, RAND_STATE_INT)
-    exp.exp_model_finetuning(X_train, X_test, y_train, y_test, RAND_STATE_INT)
+    train_data = data_objs.Data(X=X_train, y=y_train)
+    test_data = data_objs.Data(X=X_test, y=y_test)
+
+    # exp.exp_model_screening(train_data, test_data, RAND_STATE_INT)
+    # exp.exp_model_hyperparameter_sweep(train_data, test_data, RAND_STATE_INT)
+    exp.exp_model_finetuning(train_data, test_data, RAND_STATE_INT)
 
     # Package models
-
-
-    # cm = confusion_matrix(y_test, y_pred)
-    # mlflow.log_metric("cm", cm)
+    
 
 def main():
     train()
-    # exp.load_best_hyperparams()
 
 if __name__ == "__main__":
-    train()
+    main()
 
 
 class SubjectDataManager():
