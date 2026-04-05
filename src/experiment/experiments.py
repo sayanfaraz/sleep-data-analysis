@@ -27,7 +27,7 @@ def get_best_params_filename():
     return "best_params.json"
 
 def top_n():
-    return 3
+    return 6   # So I can try out the other model families as well
 
 def get_hyp_sweep_ntrials():
     return 50
@@ -134,6 +134,8 @@ def exp_model_hyperparameter_sweep(X_train, y_train, RAND_STATE_INT):
     
     top_n_models = load_top_n_models(top_n())
 
+    # TODO: put imbalanced-resampling into objective so its inside CV, not outside -> X_val will only have real values
+    # TODO: to do ^, use an ImbPipeline (SMOTE -> model)
     datasets = exp_pipeline.make_datasets(exp_pipeline.get_samplers(RAND_STATE_INT), X_train, y_train)    
 
     mlflow.set_experiment(get_model_hyperparameters_exp_name())
@@ -179,7 +181,6 @@ def model_from_hyperparam_metadata(model_metadata):
     model.set_params(**params)
 
     if model_name=="LightGBM":
-        print(model_metadata)
         refit_n_estimators = int(model_metadata["params.refit_n_estimators"])
         model.set_params(**{
             "learning_rate": 0.05,

@@ -55,6 +55,7 @@ def make_datasets(samplers: dict, X_train, y_train):
 
 def get_models():
     models = {
+        # TODO: add majority-class baseline classifier
         "RandomForest": RandomForestClassifier(n_jobs=-1),
         "SVM": SVC(probability=True),    #  change to False later, and proba -> decision_function
         "QuadraticDiscriminantAnalysis": QuadraticDiscriminantAnalysis(reg_param=0.2),  # need to tune
