@@ -22,6 +22,12 @@ def get_model_hyperparameters_exp_name():
 def get_model_finetuning_exp_name():
     return "EEG_Classification-Model_Finetuning"
 
+def get_scoring_metric_name():
+    return 'f1_macro'
+
+def scoring_metric_ind(metric_name=get_scoring_metric_name()):
+    return 'metrics.' + metric_name
+
 def get_best_params_filename():
     return "best_params.json"
 
@@ -37,7 +43,7 @@ def get_hyp_sweep_kfolds():
 def exp_model_hyperparameter_sweep(dtrain: dobjs.Data, RAND_STATE_INT):
     optuna.logging.set_verbosity(optuna.logging.WARNING) 
     
-    top_n_models = load_top_n_models(top_n())
+    top_n_models = load_top_n_models(top_n(), experiment_name=get_model_screening_exp_name())
 
     # TODO: put imbalanced-resampling into objective so its inside CV, not outside -> X_val will only have real values
     # TODO: to do ^, use an ImbPipeline (SMOTE -> model)
@@ -52,11 +58,11 @@ def exp_model_hyperparameter_sweep(dtrain: dobjs.Data, RAND_STATE_INT):
         train_final: dobjs.Data = datasets[pipeline_attrs.sampler_name]
 
         run_name = make_run_name(pipeline_attrs, exp_type="hyperparam_sweep")
-        logging.info(f"\n{run_name}, f1_macro: {str(model_metadata['metrics.f1_macro'])}")
+        logging.info(f"\n{run_name}, {get_scoring_metric_name()}: {str(model_metadata[scoring_metric_ind()])}")
 
         study = optuna.create_study(direction='maximize')
         objective = make_objective(pipeline_attrs.model_name, train_final, RAND_STATE_INT,
-                                   scoring="f1_macro",
+                                   scoring=get_scoring_metric_name(),
                                    kfolds=get_hyp_sweep_kfolds()) # should be 10
         study.optimize(objective, n_trials=get_hyp_sweep_ntrials(), n_jobs=-1)  # should be 100
 
@@ -128,13 +134,14 @@ def exp_model_screening(dtrain: dobjs.Data, dtest: dobjs.Data, RAND_STATE_INT):
 
             train_and_eval(model, train_final, dtest)
 
-def load_top_n_models(n):
+def load_top_n_models(n: int, experiment_name: str, orderby_metric=scoring_metric_ind()):
     top_n_models = []
-    
+
     # Pick Top N model families, and fine-tune them
+    orderby = orderby_metric + " DESC"
     runs = mlflow.search_runs(
-        experiment_names=[get_model_screening_exp_name()],
-        order_by=["metrics.f1_macro DESC"]
+        experiment_names=[experiment_name],
+        order_by=[orderby]
     )
 
     for i, run in runs.head(n).iterrows(): # type: ignore - We know its a pd.DataFrame based on mlflow.search_runs
