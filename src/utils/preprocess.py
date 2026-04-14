@@ -166,7 +166,9 @@ def bandpowers_from_epochs(epochs, raw, event_ids, sfreq, channel):
     sleep_stage_abs_bandpower = {}
 
     for event, e_id in event_ids.items():
-        logging.info(event, "( id", e_id, ")")
+        logging.info(f"{event}, ( id {e_id})")
+                     
+                    #  "event, "( id", str(e_id), ")")
         
         # sub_epochs = epochs[event].get_data()
         sub_epochs = epoch_get_data_wo_warning(epochs[event])
