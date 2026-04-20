@@ -30,6 +30,5 @@ def get_train_recording():
 def get_predict_recording():
     return 2
 
-
 def get_champion_model_name():
     return "SleepStageClassifier_Rel-BndPow"

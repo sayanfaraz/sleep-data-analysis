@@ -247,7 +247,8 @@ def train_and_eval(model, dtrain, dtest):
     model.fit(dtrain.X, dtrain.y)
     train_score = model.score(dtrain.X, dtrain.y)
 
-    exp_evaluation.evaluate(model, dtest.X, dtest.y)
+    metrics = exp_evaluation.evaluate(model, dtest.X, dtest.y)
+    mlflow.log_metrics(metrics) # type: ignore
 
     # cm = confusion_matrix(y_test, y_pred)
     # mlflow.log_metric("cm", cm)

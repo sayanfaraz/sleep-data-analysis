@@ -7,7 +7,8 @@
 # async def root():
 #     return {"message": "Hello World"}
 
-from src import train
+from src import train, predict
 
 if __name__ == "__main__":
-    train.main()
+    # train.main()
+    predict.predict()
